@@ -6,15 +6,15 @@ def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
     ys_pred, indices = sort(ys_pred, descending=True)
     ys_true = ys_true[indices]
 
-    num_correct_pairs = 0
+    num_incorrect_pairs = 0
     len_preds = len(ys_pred)
     for i in range(len_preds):
         if i == len_preds - 1:
             break
         for j in range(i + 1, len_preds):
-            if ys_true[i] > ys_true[j]:
-                num_correct_pairs += 1
-    return num_correct_pairs
+            if ys_true[i] < ys_true[j]:
+                num_incorrect_pairs += 1
+    return num_incorrect_pairs
 
 
 def compute_gain(y_value: float, gain_scheme: str) -> float:
