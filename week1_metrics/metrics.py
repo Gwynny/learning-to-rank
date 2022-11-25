@@ -38,14 +38,11 @@ def ndcg(ys_true: Tensor, ys_pred: Tensor,
 
 
 def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
-    infs = Tensor([float('-inf')] * (len(ys_true) - len(ys_pred)))
-    ys_pred = cat((ys_pred, infs))  # fill if ys_pred < ys_true
-
+    if ys_true.sum() == 0:
+        return -1
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
-
-    k = k if k < len(ys_true) else len(ys_true)  # shrink k to len ys_true
-    pr_at_k = ys_true[:k].sum().item() / k
+    pr_at_k = ys_true[:k].sum().item() / min(ys_true.sum(), k)
     return pr_at_k
 
 
