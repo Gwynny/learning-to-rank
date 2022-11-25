@@ -3,11 +3,11 @@ from torch import Tensor, sort, cat
 
 
 def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     num_incorrect_pairs = 0
-    len_preds = len(ys_pred)
+    len_preds = ys_true.shape[0]
     for i in range(len_preds - 1):
         for j in range(i + 1, len_preds):
             if ys_true[i] < ys_true[j]:
@@ -20,7 +20,7 @@ def compute_gain(y_value: float, gain_scheme: str) -> float:
 
 
 def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     sum_dcg = 0
@@ -40,7 +40,7 @@ def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
     infs = Tensor([float('-inf')] * (len(ys_true) - len(ys_pred)))
     ys_pred = cat((ys_pred, infs))  #fill if ys_pred < ys_true
 
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     k = k if k < len(ys_true) else len(ys_true)  #shrink k to len ys_true
@@ -49,7 +49,7 @@ def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
 
 
 def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     ind_one = (ys_true == 1).nonzero(as_tuple=True)[0].item()
@@ -57,7 +57,7 @@ def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
 
 
 def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15 ) -> float:
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     def calc_i_p_found(pred_p_look, pred_p_found, i, p_break):
@@ -77,7 +77,7 @@ def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15 ) -> float:
 
 
 def average_precision(ys_true: Tensor, ys_pred: Tensor) -> float:
-    ys_pred, indices = sort(ys_pred, descending=True)
+    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
     ap = 0
