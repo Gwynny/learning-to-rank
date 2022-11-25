@@ -8,9 +8,7 @@ def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
 
     num_incorrect_pairs = 0
     len_preds = len(ys_pred)
-    for i in range(len_preds):
-        if i == len_preds - 1:
-            break
+    for i in range(len_preds - 1):
         for j in range(i + 1, len_preds):
             if ys_true[i] < ys_true[j]:
                 num_incorrect_pairs += 1
