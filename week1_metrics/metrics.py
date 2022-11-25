@@ -16,7 +16,7 @@ def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
 
 
 def compute_gain(y_value: float, gain_scheme: str) -> float:
-    return y_value if gain_scheme=='const' else 2**y_value - 1
+    return y_value if gain_scheme == 'const' else 2 ** y_value - 1
 
 
 def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
@@ -25,12 +25,13 @@ def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
 
     sum_dcg = 0
     for i, y_true in enumerate(ys_true, 1):
-        gain = compute_gain(y_true, gain_scheme)
+        gain = compute_gain(y_true.item(), gain_scheme)
         sum_dcg += gain / log2(i + 1)
     return sum_dcg
 
 
-def ndcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str = 'const') -> float:
+def ndcg(ys_true: Tensor, ys_pred: Tensor,
+         gain_scheme: str = 'const') -> float:
     case_dcg = dcg(ys_true, ys_pred, gain_scheme)
     ideal_dcg = dcg(ys_true, ys_true, gain_scheme)
     return case_dcg / ideal_dcg
@@ -38,12 +39,12 @@ def ndcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str = 'const') -> float:
 
 def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
     infs = Tensor([float('-inf')] * (len(ys_true) - len(ys_pred)))
-    ys_pred = cat((ys_pred, infs))  #fill if ys_pred < ys_true
+    ys_pred = cat((ys_pred, infs))  # fill if ys_pred < ys_true
 
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
-    k = k if k < len(ys_true) else len(ys_true)  #shrink k to len ys_true
+    k = k if k < len(ys_true) else len(ys_true)  # shrink k to len ys_true
     pr_at_k = ys_true[:k].sum().item() / k
     return pr_at_k
 
