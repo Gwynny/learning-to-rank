@@ -55,23 +55,15 @@ def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
 
 
 def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
-    ys_pred, indices = sort(ys_pred, descending=True, dim=0)
+    _, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
-    def calc_i_p_found(pred_p_look, pred_p_found, i, p_break):
-        if pred_p_look == 0.0 or i > len(ys_true) - 1:
-            return pred_p_found
-
-        i_p_look = pred_p_look * (1 - ys_true[i - 1].item()) * (1 - p_break)
-        i_p_found = i_p_look * ys_true[i].item()
-        return pred_p_found + calc_i_p_found(
-            i_p_look, i_p_found, i + 1, p_break
-        )
-
-    i = 0
-    zero_p_look = (1 - p_break)
-    zero_p_found = zero_p_look * ys_true[0].item()
-    return calc_i_p_found(zero_p_look, zero_p_found, i + 1, p_break)
+    p_found_ = 0
+    p_look = 1
+    for y_true in ys_true:
+        p_found_ += p_look * y_true.item()
+        p_look = p_look * (1 - y_true.item()) * (1 - p_break)
+    return p_found_
 
 
 def average_precision(ys_true: Tensor, ys_pred: Tensor) -> float:
