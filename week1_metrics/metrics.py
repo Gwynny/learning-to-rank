@@ -24,9 +24,9 @@ def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
     ys_true = ys_true[indices]
 
     sum_dcg = 0
-    for i, y_true in enumerate(ys_true):
+    for i, y_true in enumerate(ys_true, 1):
         gain = compute_gain(y_true, gain_scheme)
-        sum_dcg += gain / log2(i + 2)
+        sum_dcg += gain / log2(i + 1)
     return sum_dcg
 
 
@@ -56,7 +56,7 @@ def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
     return 1 / (ind_one + 1)
 
 
-def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15 ) -> float:
+def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
