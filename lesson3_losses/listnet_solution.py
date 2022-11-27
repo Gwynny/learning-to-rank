@@ -74,15 +74,12 @@ class Solution:
                                         inp_query_ids: np.ndarray) -> \
             np.ndarray:
         # допишите ваш код здесь
-        scaler = StandardScaler()
-        scaled_arrays = []
         for query_id in np.unique(inp_query_ids):
-            scaled_part = scaler.fit_transform(
-                inp_feat_array[inp_query_ids == query_id]
-            )
-            scaled_arrays.append(scaled_part)
-        scaled_X = np.concatenate(scaled_arrays, axis=0)
-        return scaled_X
+            mask = inp_query_ids == query_id
+            scaler = StandardScaler()
+            scaled_part = scaler.fit_transform(inp_feat_array[mask])
+            inp_feat_array[mask] = scaled_part
+        return inp_feat_array
 
     def _create_model(self, listnet_num_input_features: int,
                       listnet_hidden_dim: int) -> torch.nn.Module:
