@@ -104,40 +104,23 @@ class Solution:
         # допишите ваш код здесь
         P_y_i = torch.softmax(batch_ys, dim=0)
         P_z_i = torch.softmax(batch_pred, dim=0)
-        return -torch.sum(P_y_i * torch.log(P_z_i))
+        return -torch.sum(P_y_i * torch.log(P_z_i/P_y_i))
 
     def _train_one_epoch(self) -> None:
         self.model.train()
         # допишите ваш код здесь
         unique_queries = np.unique(self.query_ids_train)
         np.random.shuffle(unique_queries)
-        batch_size = 16
 
-        losses = []
         for query_id in unique_queries:
             group_X = self.X_train[self.query_ids_train == query_id]
             group_y = self.ys_train[self.query_ids_train == query_id]
 
-            idx = torch.randperm(len(group_X))
-            group_X = group_X[idx]
-            group_y = group_y[idx]
-
-            cur_batch = 0
-            group_losses = []
-            for it in range(len(group_X) // batch_size):
-                batch_X = group_X[cur_batch: cur_batch + batch_size]
-                batch_y = group_y[cur_batch: cur_batch + batch_size]
-                cur_batch += batch_size
-
-                self.optimizer.zero_grad()
-                if len(batch_X) > 0:
-                    preds = self.model(batch_X)
-                    loss = self._calc_loss(batch_y, preds)
-                    loss.backward()
-                    self.optimizer.step()
-                    group_losses.append(loss.item())
-            losses.append(np.mean(group_losses))
-        print(np.mean(losses))
+            self.optimizer.zero_grad()
+            preds = self.model(group_X).reshape(-1,)
+            loss = self._calc_loss(group_y.reshape(-1,), preds)
+            loss.backward()
+            self.optimizer.step()
 
     def _eval_test_set(self) -> float:
         with torch.no_grad():
