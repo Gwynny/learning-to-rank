@@ -143,16 +143,15 @@ class Solution:
     def _dcg(self, ys_true: torch.Tensor, ys_pred: torch.Tensor,
              k: int) -> float:
         ys_pred, indices = torch.sort(ys_pred, dim=0, descending=True)
-        ys_true = ys_true[indices]
-        sum_dcg = i = 0
-        k = min(len(ys_true), k)
-        while i < k:
-            sum_dcg += (2 ** ys_true[i] - 1) / math.log2(i + 2)
-            i += 1
+        ys_true = ys_true[indices[:k]]
+
+        sum_dcg = 0
+        for i, y_true in enumerate(ys_true, 1):
+            sum_dcg += (2 ** y_true - 1) / math.log2(i + 1)
         return sum_dcg
 
     def _ndcg_k(self, ys_true: torch.Tensor, ys_pred: torch.Tensor,
                 ndcg_top_k: int) -> float:
-        case_dcg = self._dcg(ys_true, ys_pred, ndcg_top_k)
         ideal_dcg = self._dcg(ys_true, ys_true, ndcg_top_k)
+        case_dcg = self._dcg(ys_true, ys_pred, ndcg_top_k)
         return case_dcg / ideal_dcg
