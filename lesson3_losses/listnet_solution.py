@@ -134,6 +134,9 @@ class Solution:
                 y_pred = self.model(batch_X)
                 group_dcg = self._ndcg_k(batch_y, y_pred,
                                          self.ndcg_top_k).item()
+                if np.isnan(group_dcg):
+                    ndcgs.append(0)
+                    continue
                 ndcgs.append(group_dcg)
             return np.mean(ndcgs)
 
