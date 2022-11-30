@@ -1,6 +1,5 @@
 import math
 import pickle
-import random
 from typing import List, Tuple
 
 import numpy as np
@@ -9,7 +8,6 @@ from catboost.datasets import msrank_10k
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 from torch import Tensor
-from tqdm.auto import tqdm
 
 
 class Solution:
@@ -93,20 +91,22 @@ class Solution:
             group_y = self.ys_train[mask]
             group_preds = train_preds[mask]
             group_lambdas = self._compute_lambdas(group_y, group_preds)
+
+            if any(torch.isnan(group_lambdas)):
+                group_lambdas = torch.zeros_like(group_lambdas)
             lambdas[mask] = group_lambdas
 
         dt = DecisionTreeRegressor(max_depth=self.max_depth,
                                    min_samples_leaf=self.min_samples_leaf,
                                    random_state=cur_tree_idx)
-        num_features = self.X_train.shape[1]
         rows = np.random.choice(np.arange(self.num_train_objects),
                                 size=self.num_objects_to_choice,
                                 replace=False)
-        cols = np.random.choice(np.arange(num_features),
+        cols = np.random.choice(np.arange(self.num_input_features),
                                 size=self.num_features_to_choice,
                                 replace=False)
 
-        sample_X_train = self.X_train[rows, :][:, cols]
+        sample_X_train = self.X_train[rows, :][:, cols].numpy()
         lambdas = lambdas[rows]
         dt.fit(sample_X_train, lambdas)
         return dt, cols
@@ -175,7 +175,7 @@ class Solution:
         decay_diff = (1.0 / torch.log2(rank_order + 1.0)) - (
                     1.0 / torch.log2(rank_order.t() + 1.0))
         ideal_dcg = compute_ideal_dcg(y_true)
-        N = 1 / (ideal_dcg + 1)
+        N = 1 / ideal_dcg
         delta_ndcg = torch.abs(N * gain_diff * decay_diff)
 
         lambda_update = (0.5 * (
