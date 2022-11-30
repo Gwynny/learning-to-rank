@@ -91,9 +91,6 @@ class Solution:
             group_y = self.ys_train[mask]
             group_preds = train_preds[mask]
             group_lambdas = self._compute_lambdas(group_y, group_preds)
-
-            if any(torch.isnan(group_lambdas)):
-                group_lambdas = torch.zeros_like(group_lambdas)
             lambdas[mask] = group_lambdas
 
         dt = DecisionTreeRegressor(max_depth=self.max_depth,
@@ -125,11 +122,11 @@ class Solution:
         for idx in range(1, self.n_estimators + 1):
             dt, train_cols = self._train_one_tree(idx, prev_preds)
             self.trees.append((dt, train_cols))
-            prev_preds -= self.lr * dt.predict(
-                self.X_train[:, train_cols]).reshape(-1, 1)
-            valid_preds -= self.lr * dt.predict(
-                self.X_test[:, train_cols]).reshape(-1, 1)
-            ndcg = self._calc_data_ndcg(idx, self.ys_test, valid_preds)
+            prev_preds -= self.lr * torch.FloatTensor(dt.predict(
+                self.X_train[:, train_cols].numpy())).reshape(-1, 1)
+            valid_preds -= self.lr * torch.FloatTensor(dt.predict(
+                self.X_test[:, train_cols].numpy())).reshape(-1, 1)
+            ndcg = self._calc_data_ndcg(self.query_ids_test, self.ys_test, valid_preds)
 
             if ndcg > max_ndcg:
                 best_ndcg = idx
@@ -141,10 +138,9 @@ class Solution:
 
     def predict(self, data: torch.FloatTensor) -> torch.FloatTensor:
         preds = torch.from_numpy(
-            np.zeros((data.shape[0], 1)
-                     ).type(torch.FloatTensor)
+            np.zeros((data.shape[0], 1))).type(torch.FloatTensor)
         for dt, cols in self.trees:
-            preds -= self.lr * dt.predict(data[:, cols]).reshape(-1, 1)
+            preds -= self.lr * torch.FloatTensor(dt.predict(data[:, cols].numpy()).reshape(-1, 1))
         return preds
 
     def _compute_lambdas(self, y_true: torch.FloatTensor,
@@ -175,7 +171,7 @@ class Solution:
         decay_diff = (1.0 / torch.log2(rank_order + 1.0)) - (
                     1.0 / torch.log2(rank_order.t() + 1.0))
         ideal_dcg = compute_ideal_dcg(y_true)
-        N = 1 / ideal_dcg
+        N = 1 / (ideal_dcg + 1)
         delta_ndcg = torch.abs(N * gain_diff * decay_diff)
 
         lambda_update = (0.5 * (
@@ -216,9 +212,15 @@ class Solution:
         return np.mean(ndcgs)
 
     def save_model(self, path: str):
-        # допишите ваш код здесь
-        pass
+        state = {
+            'trees': self.trees,
+            'lr': self.lr
+        }
+        f = open(path, 'wb')
+        pickle.dump(state, f)
 
     def load_model(self, path: str):
-        # допишите ваш код здесь
-        pass
+        f = open(path, 'rb')
+        state = pickle.load(f)
+        self.trees = state['trees']
+        self.lr = state['lr']
