@@ -8,6 +8,7 @@ import torch
 from catboost.datasets import msrank_10k
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
+from torch import Tensor
 from tqdm.auto import tqdm
 
 
@@ -17,6 +18,14 @@ class Solution:
                  subsample: float = 0.6, colsample_bytree: float = 0.9,
                  max_depth: int = 5, min_samples_leaf: int = 8):
         self._prepare_data()
+        self.num_input_features = self.X_train.shape[1]
+        self.num_train_objects = self.X_train.shape[0]
+        self.num_test_objects = self.X_test.shape[0]
+
+        self.num_features_to_choice = int(colsample_bytree *
+                                          self.num_input_features)
+        self.num_objects_to_choice = int(subsample * self.num_train_objects)
+
 
         self.ndcg_top_k = ndcg_top_k
         self.n_estimators = n_estimators
@@ -78,11 +87,9 @@ class Solution:
         # допишите ваш код здесь
         np.random.seed(cur_tree_idx)
         unique_queries = np.unique(self.query_ids_train)
-        num_objects = self.X_train.shape[0]
-        lambdas = np.zeros((num_objects, 1))
+        lambdas = np.zeros((self.num_train_objects, 1))
         for i, query_id in enumerate(unique_queries):
             mask = self.query_ids_train == query_id
-            group_X = self.X_train[mask]
             group_y = self.ys_train[mask]
             group_preds = train_preds[mask]
             group_lambdas = self._compute_lambdas(group_y, group_preds)
@@ -92,27 +99,28 @@ class Solution:
                                    min_samples_leaf=self.min_samples_leaf,
                                    random_state=cur_tree_idx)
         num_features = self.X_train.shape[1]
-        rows = np.random.choice(np.arange(num_objects),
-                                size=int(self.subsample * num_objects),
+        rows = np.random.choice(np.arange(self.num_train_objects),
+                                size=self.num_objects_to_choice,
                                 replace=False)
         cols = np.random.choice(np.arange(num_features),
-                                size=int(self.colsample_bytree * num_features),
+                                size=self.num_features_to_choice,
                                 replace=False)
 
         sample_X_train = self.X_train[rows, :][:, cols]
         lambdas = lambdas[rows]
         dt.fit(sample_X_train, lambdas)
-        return (dt, cols)
+        return dt, cols
 
     def fit(self):
         np.random.seed(0)
         # допишите ваш код здесь
-        num_objects = self.X_train.shape[0]
         best_ndcg = max_ndcg = 0
-        prev_preds = torch.from_numpy(np.zeros((num_objects, 1))).type(
-            torch.FloatTensor)
+        prev_preds = torch.from_numpy(
+            np.zeros((self.num_train_objects, 1))
+        ).type(torch.FloatTensor)
         valid_preds = torch.from_numpy(
-            np.zeros((self.X_test.shape[0], 1))).type(torch.FloatTensor)
+            np.zeros((self.num_test_objects, 1))
+        ).type(torch.FloatTensor)
 
         for idx in range(1, self.n_estimators + 1):
             dt, train_cols = self._train_one_tree(idx, prev_preds)
@@ -125,19 +133,22 @@ class Solution:
 
             if ndcg > max_ndcg:
                 best_ndcg = idx
-            print(ndcg)
+
+            if idx % 10 == 0:
+                print(idx, ndcg)
 
         self.trees = self.trees[:best_ndcg]
 
     def predict(self, data: torch.FloatTensor) -> torch.FloatTensor:
-        preds = torch.from_numpy(np.zeros((self.X_test.shape[0], 1))).type(
-            torch.FloatTensor)
+        preds = torch.from_numpy(
+            np.zeros((data.shape[0], 1)
+                     ).type(torch.FloatTensor)
         for dt, cols in self.trees:
-            preds -= self.lr * dt.predict(data[:, cols])
+            preds -= self.lr * dt.predict(data[:, cols]).reshape(-1, 1)
         return preds
 
     def _compute_lambdas(self, y_true: torch.FloatTensor,
-                         y_pred: torch.FloatTensor) -> torch.FloatTensor:
+                         y_pred: torch.FloatTensor) -> Tensor:
         def compute_ideal_dcg(ys_true: torch.Tensor) -> float:
             ys_true, _ = torch.sort(ys_true, dim=0, descending=True)
 
@@ -153,7 +164,7 @@ class Solution:
             Sij = pos_pairs - neg_pairs
             return Sij
 
-        _, rank_order = torch.sort(y_true, descending=True, axis=0)
+        _, rank_order = torch.sort(y_true, descending=True, dim=0)
         rank_order += 1
 
         pos_pairs_score_diff = 1.0 + torch.exp((y_pred - y_pred.t()))
