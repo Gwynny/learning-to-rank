@@ -26,8 +26,7 @@ class GaussianKernel(torch.nn.Module):
         self.sigma = sigma
 
     def forward(self, x):
-        # допишите ваш код здесь
-        pass
+        return torch.exp(torch.pow((x - self.mu) / self.sigma, 2))
 
 
 class KNRM(torch.nn.Module):
@@ -55,12 +54,29 @@ class KNRM(torch.nn.Module):
 
     def _get_kernels_layers(self) -> torch.nn.ModuleList:
         kernels = torch.nn.ModuleList()
-        # допишите ваш код здесь
+        # my code here
+        shrink_len = 1.0 / self.kernel_num
+        left, right = -1.0 + shrink_len, 1.0 - shrink_len
+        mus = np.append(np.linspace(left, right, self.kernel_num - 1), 1.0)
+
+        for mu in mus:
+            kernels.append(GaussianKernel(mu=mu, sigma=self.sigma))
         return kernels
 
     def _get_mlp(self) -> torch.nn.Sequential:
-        # допишите ваш код здесь
-        pass
+        # my code here
+        if len(self.out_layers) == 0:
+            return torch.nn.Sequential(torch.nn.Linear(self.kernel_num, 1))
+
+        layers = []
+        layers.append(torch.nn.Linear(self.kernel_num, self.out_layers[0]))
+        layers.append(torch.nn.ReLU())
+        for i in range(1, len(self.out_layers)):
+            layers.append(
+                torch.nn.Linear(self.out_layers[i - 1], self.out_layers[i]))
+            layers.append(torch.nn.ReLU())
+        layers.append(torch.nn.Linear(self.out_layers[-1], 1))
+        return torch.nn.Sequential(*layers)
 
     def forward(self, input_1: Dict[str, torch.Tensor],
                 input_2: Dict[str, torch.Tensor]) -> torch.FloatTensor:
@@ -74,8 +90,16 @@ class KNRM(torch.nn.Module):
 
     def _get_matching_matrix(self, query: torch.Tensor,
                              doc: torch.Tensor) -> torch.FloatTensor:
-        # допишите ваш код здесь
-        pass
+        # my code here
+        # https://stackoverflow.com/questions/50411191/
+        # how-to-compute-the-cosine-similarity-in-pytorch-for-all-rows-in-a
+        # -matrix-with-re
+        eps = 1e-8
+        q_n, d_n = query.norm(dim=2)[:, :, None], doc.norm(dim=2)[:, :, None]
+        query_norm = query / torch.clamp(q_n, min=eps)
+        doc_norm = doc / torch.clamp(d_n, min=eps)
+        sim_mt = torch.bmm(query_norm, doc_norm.transpose(1, 2))
+        return sim_mt
 
     def _apply_kernels(self,
                        matching_matrix: torch.FloatTensor) -> \
@@ -263,12 +287,14 @@ class Solution:
         return glue_df_fin
 
     def handle_punctuation(self, inp_str: str) -> str:
+        # my code below
         translator = str.maketrans(string.punctuation,
                                    ' ' * len(string.punctuation))
         new_str = inp_str.translate(translator)
         return new_str
 
     def simple_preproc(self, inp_str: str) -> List[str]:
+        # my code below
         no_punctuation_str = self.handle_punctuation(inp_str)
         lowered_str = no_punctuation_str.lower()
         splitted_doc = nltk.word_tokenize(lowered_str)
@@ -276,16 +302,18 @@ class Solution:
 
     def _filter_rare_words(self, vocab: Dict[str, int],
                            min_occurancies: int) -> Dict[str, int]:
+        # my code below
         filtered_vocab = {x: count for x, count in vocab.items() if
                           count > min_occurancies}
         return filtered_vocab
 
     def get_all_tokens(self, list_of_df: List[pd.DataFrame],
                        min_occurancies: int) -> List[str]:
+        # my code below
         preped_series = []
         for df in list_of_df:
-            preped_question1 = df['question1'].apply(simple_preproc)
-            preped_question2 = df['question2'].apply(simple_preproc)
+            preped_question1 = df['text_left'].apply(self.simple_preproc)
+            preped_question2 = df['text_right'].apply(self.simple_preproc)
             preped_series.append(preped_question1)
             preped_series.append(preped_question2)
 
@@ -297,6 +325,7 @@ class Solution:
         return [key for key, _ in vocab.items()]
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
+        # my code below
         with open(file_path, encoding='utf-8') as file:
             glove_dict = {}
             for line in file:
@@ -312,6 +341,7 @@ class Solution:
                                    ) -> Tuple[np.ndarray,
                                               Dict[str, int],
                                               List[str]]:
+        # my code below
         np.random.seed(random_seed)
         glove_dict = self._read_glove_embeddings(file_path)
         emb_dim = len(glove_dict['the'])
