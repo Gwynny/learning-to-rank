@@ -54,7 +54,7 @@ class Solution:
     def _prepare_data(self) -> None:
         (X_train, y_train, self.query_ids_train,
          X_test, y_test, self.query_ids_test) = self._get_data()
-        # допишите ваш код здесь
+        # my code below
         X_train = self._scale_features_in_query_groups(
             X_train, self.query_ids_train
         )
@@ -72,7 +72,7 @@ class Solution:
     def _scale_features_in_query_groups(self, inp_feat_array: np.ndarray,
                                         inp_query_ids: np.ndarray) -> \
             np.ndarray:
-        # допишите ваш код здесь
+        # my code below
         for query_id in np.unique(inp_query_ids):
             mask = inp_query_ids == query_id
             scaler = StandardScaler()
@@ -83,7 +83,7 @@ class Solution:
     def _train_one_tree(self, cur_tree_idx: int,
                         train_preds: torch.FloatTensor
                         ) -> Tuple[DecisionTreeRegressor, np.ndarray]:
-        # допишите ваш код здесь
+        # my code below
         lambdas = np.zeros((self.num_train_objects, 1))
         groups_to_train_on = np.random.choice(self.unique_train_groups,
                                               size=self.num_groups_to_choice,
@@ -111,7 +111,7 @@ class Solution:
 
     def fit(self):
         np.random.seed(0)
-        # допишите ваш код здесь
+        # my code below
         best_ndcg_ind = 0
         prev_preds = torch.zeros(
             self.num_train_objects, 1).type(torch.FloatTensor)
@@ -135,6 +135,7 @@ class Solution:
         self.trees = self.trees[:best_ndcg_ind]
 
     def predict(self, data: torch.FloatTensor) -> torch.FloatTensor:
+        # my code below
         preds = torch.zeros(data.shape[0], 1).type(torch.FloatTensor)
         for dt, cols in self.trees:
             tmp_preds = dt.predict(data[:, cols].numpy())
@@ -196,7 +197,7 @@ class Solution:
     def _calc_data_ndcg(self, queries_list: np.ndarray,
                         true_labels: torch.FloatTensor,
                         preds: torch.FloatTensor) -> float:
-        # допишите ваш код здесь
+        # my code below
         unique_queries = np.unique(queries_list)
         ndcgs = []
         for query_id in unique_queries:

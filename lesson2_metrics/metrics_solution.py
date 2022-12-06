@@ -3,6 +3,7 @@ from torch import Tensor, sort, cat
 
 
 def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
+    # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
@@ -16,10 +17,13 @@ def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
 
 
 def compute_gain(y_value: float, gain_scheme: str) -> float:
+    # my code below
+    assert gain_scheme in ['const', 'exp'], "Value must be 'const' or 'exp'"
     return y_value if gain_scheme == 'const' else 2 ** y_value - 1
 
 
 def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
+    # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
@@ -32,12 +36,14 @@ def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
 
 def ndcg(ys_true: Tensor, ys_pred: Tensor,
          gain_scheme: str = 'const') -> float:
+    # my code below
     case_dcg = dcg(ys_true, ys_pred, gain_scheme)
     ideal_dcg = dcg(ys_true, ys_true, gain_scheme)
     return case_dcg / ideal_dcg
 
 
 def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
+    # my code below
     if ys_true.sum() == 0:
         return -1
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
@@ -47,6 +53,7 @@ def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
 
 
 def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
+    # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
@@ -55,6 +62,7 @@ def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
 
 
 def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
+    # my code below
     _, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 
@@ -67,6 +75,7 @@ def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
 
 
 def average_precision(ys_true: Tensor, ys_pred: Tensor) -> float:
+    # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
 

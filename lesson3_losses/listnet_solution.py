@@ -13,7 +13,7 @@ class ListNet(torch.nn.Module):
     def __init__(self, num_input_features: int, hidden_dim: int):
         super().__init__()
         self.hidden_dim = hidden_dim
-        # укажите архитектуру простой модели здесь
+        # my code below
         self.model = nn.Sequential(
             nn.Linear(num_input_features, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
@@ -57,7 +57,7 @@ class Solution:
     def _prepare_data(self) -> None:
         (X_train, y_train, self.query_ids_train,
          X_test, y_test, self.query_ids_test) = self._get_data()
-        # допишите ваш код здесь
+        # my code below
         X_train = self._scale_features_in_query_groups(
             X_train, self.query_ids_train
         )
@@ -73,7 +73,7 @@ class Solution:
     def _scale_features_in_query_groups(self, inp_feat_array: np.ndarray,
                                         inp_query_ids: np.ndarray) -> \
             np.ndarray:
-        # допишите ваш код здесь
+        # my code below
         for query_id in np.unique(inp_query_ids):
             mask = inp_query_ids == query_id
             scaler = StandardScaler()
@@ -84,7 +84,7 @@ class Solution:
     def _create_model(self, listnet_num_input_features: int,
                       listnet_hidden_dim: int) -> torch.nn.Module:
         torch.manual_seed(0)
-        # допишите ваш код здесь
+        # my code below
         net = ListNet(
             listnet_num_input_features,
             listnet_hidden_dim
@@ -92,7 +92,7 @@ class Solution:
         return net
 
     def fit(self) -> List[float]:
-        # допишите ваш код здесь
+        # my code below
         val_ndcgs = []
         for _ in range(self.n_epochs):
             self._train_one_epoch()
@@ -101,14 +101,14 @@ class Solution:
 
     def _calc_loss(self, batch_ys: torch.FloatTensor,
                    batch_pred: torch.FloatTensor) -> torch.FloatTensor:
-        # допишите ваш код здесь
+        # my code below
         P_y_i = torch.softmax(batch_ys, dim=0)
         P_z_i = torch.softmax(batch_pred, dim=0)
         return -torch.sum(P_y_i * torch.log(P_z_i/P_y_i))
 
     def _train_one_epoch(self) -> None:
         self.model.train()
-        # допишите ваш код здесь
+        # my code below
         unique_queries = np.unique(self.query_ids_train)
         np.random.shuffle(unique_queries)
 
@@ -127,7 +127,7 @@ class Solution:
             self.model.eval()
             unique_queries = np.unique(self.query_ids_test)
             ndcgs = []
-            # допишите ваш код здесь
+            # my code below
             for query_id in unique_queries:
                 batch_X = self.X_test[self.query_ids_test == query_id]
                 batch_y = self.ys_test[self.query_ids_test == query_id]
@@ -152,6 +152,7 @@ class Solution:
 
     def _ndcg_k(self, ys_true: torch.Tensor, ys_pred: torch.Tensor,
                 ndcg_top_k: int) -> float:
+        # my code below
         ideal_dcg = self._dcg(ys_true, ys_true, ndcg_top_k)
         case_dcg = self._dcg(ys_true, ys_pred, ndcg_top_k)
         return case_dcg / ideal_dcg
