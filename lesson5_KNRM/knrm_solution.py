@@ -26,7 +26,9 @@ class GaussianKernel(torch.nn.Module):
         self.sigma = sigma
 
     def forward(self, x):
-        return torch.exp(torch.pow((x - self.mu) / self.sigma, 2))
+        numerator = -torch.pow((x - self.mu), 2)
+        denominator = 2 * self.sigma**2
+        return torch.exp(numerator / denominator)
 
 
 class KNRM(torch.nn.Module):
@@ -304,7 +306,7 @@ class Solution:
                            min_occurancies: int) -> Dict[str, int]:
         # my code below
         filtered_vocab = {x: count for x, count in vocab.items() if
-                          count > min_occurancies}
+                          count >= min_occurancies}
         return filtered_vocab
 
     def get_all_tokens(self, list_of_df: List[pd.DataFrame],
