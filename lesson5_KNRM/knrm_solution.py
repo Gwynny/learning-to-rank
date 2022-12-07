@@ -1,16 +1,15 @@
 import itertools
+import math
+import nltk
 import string
+import torch
+import numpy as np
+import pandas as pd
+import torch.nn.functional as F
 from collections import Counter
 from typing import Dict, List, Tuple, Union, Callable
 
-import nltk
-
 nltk.download('punkt')
-import numpy as np
-import math
-import pandas as pd
-import torch
-import torch.nn.functional as F
 
 # Замените пути до директорий и файлов! Можете использовать для локальной
 # отладки.
@@ -27,7 +26,7 @@ class GaussianKernel(torch.nn.Module):
 
     def forward(self, x):
         numerator = -torch.pow((x - self.mu), 2)
-        denominator = 2 * self.sigma**2
+        denominator = 2 * self.sigma ** 2
         return torch.exp(numerator / denominator)
 
 
@@ -291,7 +290,7 @@ class Solution:
     def handle_punctuation(self, inp_str: str) -> str:
         # my code below
         translator = str.maketrans(string.punctuation,
-                                   ' ' * len(string.punctuation))
+                                   ' '*len(string.punctuation))
         new_str = inp_str.translate(translator)
         return new_str
 
@@ -321,10 +320,12 @@ class Solution:
 
         concat_series = pd.concat(preped_series)
         one_list_of_tokens = list(
-            itertools.chain.from_iterable(concat_series.to_list()))
+            itertools.chain.from_iterable(concat_series.to_list())
+        )
         vocab = dict(Counter(one_list_of_tokens))
         vocab = self._filter_rare_words(vocab, min_occurancies)
-        return [key for key, _ in vocab.items()]
+        tokens = [key for key in vocab.keys()]
+        return tokens
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
         # my code below
@@ -349,9 +350,11 @@ class Solution:
         emb_dim = len(glove_dict['the'])
 
         emb_matrix = []
-        pad_vec = np.random.uniform(low=-rand_uni_bound, high=rand_uni_bound,
+        pad_vec = np.random.uniform(low=-rand_uni_bound,
+                                    high=rand_uni_bound,
                                     size=emb_dim)
-        oov_vec = np.random.uniform(low=-rand_uni_bound, high=rand_uni_bound,
+        oov_vec = np.random.uniform(low=-rand_uni_bound,
+                                    high=rand_uni_bound,
                                     size=emb_dim)
         emb_matrix.append(pad_vec)
         emb_matrix.append(oov_vec)
@@ -364,22 +367,25 @@ class Solution:
                 emb_matrix.append(glove_dict[token])
                 vocab[token] = ind
             else:
-                unk_words.append(token)
-                vocab[token] = ind
                 random_emb = np.random.uniform(low=-rand_uni_bound,
                                                high=rand_uni_bound,
                                                size=emb_dim)
                 emb_matrix.append(random_emb)
+                unk_words.append(token)
+                vocab[token] = ind
         emb_matrix = np.array(emb_matrix).astype(float)
         return emb_matrix, vocab, unk_words
 
     def build_knrm_model(self) -> Tuple[
-        torch.nn.Module, Dict[str, int], List[str]]:
-        emb_matrix, vocab, unk_words = self.create_glove_emb_from_file(
-            self.glove_vectors_path, self.all_tokens, self.random_seed,
-            self.emb_rand_uni_bound)
+            torch.nn.Module, Dict[str, int], List[str]]:
+        emb_matrix, vocab, unk_words = \
+            self.create_glove_emb_from_file(self.glove_vectors_path,
+                                            self.all_tokens,
+                                            self.random_seed,
+                                            self.emb_rand_uni_bound)
         torch.manual_seed(self.random_seed)
-        knrm = KNRM(emb_matrix, freeze_embeddings=self.freeze_knrm_embeddings,
+        knrm = KNRM(emb_matrix,
+                    freeze_embeddings=self.freeze_knrm_embeddings,
                     out_layers=self.knrm_out_mlp,
                     kernel_num=self.knrm_kernel_num)
         return knrm, vocab, unk_words
@@ -389,9 +395,10 @@ class Solution:
         # допишите ваш код здесь
         pass
 
-    def create_val_pairs(self, inp_df: pd.DataFrame, fill_top_to: int = 15,
-                         min_group_size: int = 2, seed: int = 0) -> List[
-        List[Union[str, float]]]:
+    def create_val_pairs(self, inp_df: pd.DataFrame,
+                         fill_top_to: int = 15,
+                         min_group_size: int = 2,
+                         seed: int = 0) -> List[List[Union[str, float]]]:
         inp_df_select = inp_df[['id_left', 'id_right', 'label']]
         inf_df_group_sizes = inp_df_select.groupby('id_left').size()
         glue_dev_leftids_to_use = list(
@@ -428,20 +435,18 @@ class Solution:
 
     def get_idx_to_text_mapping(self, inp_df: pd.DataFrame) -> Dict[str, str]:
         left_dict = (
-            inp_df
-            [['id_left', 'text_left']]
-                .drop_duplicates()
-                .set_index('id_left')
-            ['text_left']
-                .to_dict()
+            inp_df[
+                ['id_left', 'text_left']
+            ].drop_duplicates()
+            .set_index('id_left')
+            ['text_left'].to_dict()
         )
         right_dict = (
-            inp_df
-            [['id_right', 'text_right']]
-                .drop_duplicates()
-                .set_index('id_right')
-            ['text_right']
-                .to_dict()
+            inp_df[
+                ['id_right', 'text_right']
+            ].drop_duplicates()
+            .set_index('id_right')
+            ['text_right'].to_dict()
         )
         left_dict.update(right_dict)
         return left_dict
