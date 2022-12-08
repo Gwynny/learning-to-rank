@@ -251,7 +251,8 @@ def collate_fn(
 
 
 class Solution:
-    def __init__(self, glue_qqp_dir: str, glove_vectors_path: str,
+    def __init__(self, glue_qqp_dir: str,
+                 glove_vectors_path: str,
                  min_token_occurancies: int = 1,
                  random_seed: int = 0,
                  emb_rand_uni_bound: float = 0.2,
@@ -313,7 +314,7 @@ class Solution:
     def handle_punctuation(self, inp_str: str) -> str:
         # my code below
         translator = str.maketrans(string.punctuation,
-                                   ' '*len(string.punctuation))
+                                   ' ' * len(string.punctuation))
         new_str = inp_str.translate(translator)
         return new_str
 
@@ -400,7 +401,7 @@ class Solution:
         return emb_matrix, vocab, unk_words
 
     def build_knrm_model(self) -> Tuple[
-            torch.nn.Module, Dict[str, int], List[str]]:
+        torch.nn.Module, Dict[str, int], List[str]]:
         emb_matrix, vocab, unk_words = \
             self.create_glove_emb_from_file(self.glove_vectors_path,
                                             self.all_tokens,
@@ -413,12 +414,59 @@ class Solution:
                     kernel_num=self.knrm_kernel_num)
         return knrm, vocab, unk_words
 
-    def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int
+    def sample_data_for_train_iter(inp_df: pd.DataFrame, seed: int
                                    ) -> List[List[Union[str, float]]]:
         # допишите ваш код здесь
-        pass
+        inp_df_select = train_df[['id_left', 'id_right', 'label']]
+        inf_df_group_sizes = inp_df_select.groupby('id_left').size()
+        glue_dev_leftids_to_use = list(
+            inf_df_group_sizes[inf_df_group_sizes >= 3].index)
+        glue_dev_leftids_to_use = np.random.choice(
+            list(glue_dev_leftids_to_use), size=3000, replace=False)
+        groups = inp_df_select[inp_df_select.id_left.isin(
+            glue_dev_leftids_to_use)].groupby('id_left')
 
-    def create_val_pairs(self, inp_df: pd.DataFrame,
+        all_ids = set(train_df['id_left']).union(set(train_df['id_right']))
+
+        out_triplets = []
+
+        np.random.seed(seed)
+        negative_example = np.random.choice(list(all_ids), size=1).item()
+        for id_left, group in groups:
+            right_ids = np.array(group['id_right'].to_list())
+            np.random.shuffle(right_ids)
+            all_groups_ids = set([id_left]).union(set(right_ids))
+            candidates = list(combinations(right_ids, 2))
+            candidates_inds = np.random.choice(list(range(len(candidates))),
+                                               size=3, replace=False)
+
+            for ind in candidates_inds:
+                candidate_left, candidate_right = candidates[ind][0], \
+                                                  candidates[ind][1]
+                left_label = group[group['id_right'] == candidate_left][
+                    'label'].item()
+                right_label = group[group['id_right'] == candidate_right][
+                    'label'].item()
+                label_diff = left_label - right_label
+                if label_diff > 0:
+                    out_triplets.append(
+                        [id_left, candidate_left, candidate_right, 1])
+                else:
+                    out_triplets.append(
+                        [id_left, candidate_left, candidate_right, 0])
+
+            # negative_example = np.random.choice(list(all_ids), size=1).item()
+            out_triplets.append(
+                [id_left, candidate_right, negative_example, 0])
+            negative_example = id_left
+
+        out_triplets = np.array(out_triplets)
+        train_inds = np.random.choice(list(range(len(out_triplets))),
+                                      size=10000, replace=False)
+        return out_triplets[train_inds]
+
+    def create_val_pairs(self,
+                         inp_df: pd.DataFrame,
                          fill_top_to: int = 15,
                          min_group_size: int = 2,
                          seed: int = 0) -> List[List[Union[str, float]]]:
@@ -461,31 +509,40 @@ class Solution:
             inp_df[
                 ['id_left', 'text_left']
             ].drop_duplicates()
-            .set_index('id_left')
+                .set_index('id_left')
             ['text_left'].to_dict()
         )
         right_dict = (
             inp_df[
                 ['id_right', 'text_right']
             ].drop_duplicates()
-            .set_index('id_right')
+                .set_index('id_right')
             ['text_right'].to_dict()
         )
         left_dict.update(right_dict)
         return left_dict
 
+    def _dcg(self, ys_true: np.array, ys_pred: np.array, k: int) -> float:
+        indices = np.argsort(-ys_pred)
+        ys_true = ys_true[indices[:k]]
+
+        sum_dcg = 0
+        for i, y_true in enumerate(ys_true, 1):
+            sum_dcg += (2 ** y_true - 1) / math.log2(i + 1)
+        return sum_dcg
+
     def ndcg_k(self, ys_true: np.array, ys_pred: np.array,
                ndcg_top_k: int = 10) -> float:
-        # допишите ваш код здесь  (обратите внимание, что используются
-        # вектора numpy)
-        pass
+        ideal_dcg = self._dcg(ys_true, ys_true, ndcg_top_k)
+        case_dcg = self._dcg(ys_true, ys_pred, ndcg_top_k)
+        return float(case_dcg / ideal_dcg)
 
     def valid(self, model: torch.nn.Module,
               val_dataloader: torch.utils.data.DataLoader) -> float:
         labels_and_groups = val_dataloader.dataset.index_pairs_or_triplets
-        labels_and_groups = pd.DataFrame(
-            labels_and_groups,
-            columns=['left_id', 'right_id', 'rel'])
+        labels_and_groups = pd.DataFrame(labels_and_groups,
+                                         columns=['left_id', 'right_id',
+                                                  'rel'])
 
         all_preds = []
         for batch in (val_dataloader):
@@ -511,4 +568,27 @@ class Solution:
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
         # допишите ваш код здесь
-        pass
+        triplets = sample_data_for_train_iter(self.glue_train_df, 0)
+        train_dataset = TrainTripletsDataset(triplets,
+                                             self.idx_to_text_mapping_train,
+                                             vocab=self.vocab,
+                                             oov_val=self.vocab['OOV'],
+                                             preproc_func=self.simple_preproc)
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=self.dataloader_bs, num_workers=0,
+            collate_fn=collate_fn, shuffle=True)
+
+        for i in range(n_epochs):
+            self.model.train(True)
+            for j, data in enumerate(train_dataloader):
+                # Every data instance is an input + label pair
+                query_left_docs, query_right_docs, labels = data
+                opt.zero_grad()
+                outputs = self.model(query_left_docs, query_right_docs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                opt.step()
+
+            self.model.train(False)
+            val_ndcg = self.valid(self.model, self.val_dataloader)
+            print(f'Epoch: {i}, validation ndcg {val_ndcg}')
