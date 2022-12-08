@@ -31,16 +31,17 @@ class GaussianKernel(torch.nn.Module):
 
 
 class KNRM(torch.nn.Module):
-    def __init__(self, embedding_matrix: np.ndarray, freeze_embeddings: bool,
+    def __init__(self, embedding_matrix: np.ndarray,
+                 freeze_embeddings: bool,
                  kernel_num: int = 21,
-                 sigma: float = 0.1, exact_sigma: float = 0.001,
+                 sigma: float = 0.1,
+                 exact_sigma: float = 0.001,
                  out_layers: List[int] = [10, 5]):
         super().__init__()
         self.embeddings = torch.nn.Embedding.from_pretrained(
             torch.FloatTensor(embedding_matrix),
             freeze=freeze_embeddings,
-            padding_idx=0
-        )
+            padding_idx=0)
 
         self.kernel_num = kernel_num
         self.sigma = sigma
@@ -68,10 +69,8 @@ class KNRM(torch.nn.Module):
         # my code here
         if len(self.out_layers) == 0:
             return torch.nn.Sequential(torch.nn.Linear(self.kernel_num, 1))
-
-        layers = []
-        layers.append(torch.nn.Linear(self.kernel_num, self.out_layers[0]))
-        layers.append(torch.nn.ReLU())
+        layers = [torch.nn.Linear(self.kernel_num, self.out_layers[0]),
+                  torch.nn.ReLU()]
         for i in range(1, len(self.out_layers)):
             layers.append(
                 torch.nn.Linear(self.out_layers[i - 1], self.out_layers[i]))
@@ -144,11 +143,21 @@ class RankingDataset(torch.utils.data.Dataset):
         return len(self.index_pairs_or_triplets)
 
     def _tokenized_text_to_index(self, tokenized_text: List[str]) -> List[int]:
-        # допишите ваш код здесь
-        pass
+        # my code here
+        token_idxs = []
+        text = tokenized_text[:self.max_len]
+        for token in text:
+            token_idxs.append(self.vocab.get(token, self.oov_val))
+        return token_idxs
 
     def _convert_text_idx_to_token_idxs(self, idx: int) -> List[int]:
-        # допишите ваш код здесь
+        # my code here
+        text = self.idx_to_text_mapping[idx]
+        tokenized_text = self.preproc_func(text)
+        token_idxs = self._tokenized_text_to_index(tokenized_text)
+        return token_idxs
+
+    def __getitem__(self, idx: int):
         pass
 
     def __getitem__(self, idx: int):
@@ -157,14 +166,28 @@ class RankingDataset(torch.utils.data.Dataset):
 
 class TrainTripletsDataset(RankingDataset):
     def __getitem__(self, idx):
-        # допишите ваш код здесь
-        pass
+        # my code here
+        triplets = self.index_pairs_or_triplets[idx]
+        query_tokens = self._convert_text_idx_to_token_idxs(str(triplets[0]))
+        left_doc_tokens = self._convert_text_idx_to_token_idxs(str(triplets[1]))
+        right_doc_tokens = self._convert_text_idx_to_token_idxs(str(triplets[2]))
+        label = triplets[3]
+
+        left_query_doc = {'query': query_tokens, 'document': left_doc_tokens}
+        right_query_doc = {'query': query_tokens, 'document': right_doc_tokens}
+        return left_query_doc, right_query_doc, label
 
 
 class ValPairsDataset(RankingDataset):
     def __getitem__(self, idx):
-        # допишите ваш код здесь
-        pass
+        # my code here
+        pairs = self.index_pairs_or_triplets[idx]
+        query_tokens = self._convert_text_idx_to_token_idxs(str(pairs[0]))
+        doc_tokens = self._convert_text_idx_to_token_idxs(str(pairs[1]))
+        label = pairs[2]
+
+        query_doc = {'query': query_tokens, 'document': doc_tokens}
+        return query_doc, label
 
 
 def collate_fn(
@@ -460,9 +483,9 @@ class Solution:
     def valid(self, model: torch.nn.Module,
               val_dataloader: torch.utils.data.DataLoader) -> float:
         labels_and_groups = val_dataloader.dataset.index_pairs_or_triplets
-        labels_and_groups = pd.DataFrame(labels_and_groups,
-                                         columns=['left_id', 'right_id',
-                                                  'rel'])
+        labels_and_groups = pd.DataFrame(
+            labels_and_groups,
+            columns=['left_id', 'right_id', 'rel'])
 
         all_preds = []
         for batch in (val_dataloader):
