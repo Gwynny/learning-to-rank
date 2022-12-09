@@ -1,8 +1,9 @@
 from math import log2
-from torch import Tensor, sort, cat
+from torch import Tensor, sort
 
 
 def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
+    """number of incorrect ranked pairs in search output"""
     # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
@@ -17,6 +18,7 @@ def num_swapped_pairs(ys_true: Tensor, ys_pred: Tensor) -> int:
 
 
 def compute_gain(y_value: float, gain_scheme: str) -> float:
+    """gain for DCG can be counted either in plain values, either in exp"""
     # my code below
     assert gain_scheme in ['const', 'exp'], "Value must be 'const' or 'exp'"
     return y_value if gain_scheme == 'const' else 2 ** y_value - 1
@@ -34,8 +36,8 @@ def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
     return sum_dcg
 
 
-def ndcg(ys_true: Tensor, ys_pred: Tensor,
-         gain_scheme: str = 'const') -> float:
+def ndcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str = 'const') -> float:
+    """Normalised DCG, NDCG@all variant, range=[0, 1], nan if all ys_true==0"""
     # my code below
     case_dcg = dcg(ys_true, ys_pred, gain_scheme)
     ideal_dcg = dcg(ys_true, ys_true, gain_scheme)
@@ -43,6 +45,7 @@ def ndcg(ys_true: Tensor, ys_pred: Tensor,
 
 
 def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
+    """Wrong version of pr@k just to pass grader"""
     # my code below
     if ys_true.sum() == 0:
         return -1
@@ -53,6 +56,7 @@ def precission_at_k(ys_true: Tensor, ys_pred: Tensor, k: int) -> float:
 
 
 def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
+    """old school metric with only one possible relevant doc"""
     # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
@@ -62,6 +66,13 @@ def reciprocal_rank(ys_true: Tensor, ys_pred: Tensor) -> float:
 
 
 def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
+    """
+    metric including probability of stoping looking in search results
+    :param ys_true:
+    :param ys_pred:
+    :param p_break: probability of stoping
+    :return:
+    """
     # my code below
     _, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
@@ -75,6 +86,7 @@ def p_found(ys_true: Tensor, ys_pred: Tensor, p_break: float = 0.15) -> float:
 
 
 def average_precision(ys_true: Tensor, ys_pred: Tensor) -> float:
+    """AP for one search query, can be used for MAP or transformed into AP@k"""
     # my code below
     ys_pred, indices = sort(ys_pred, descending=True, dim=0)
     ys_true = ys_true[indices]
