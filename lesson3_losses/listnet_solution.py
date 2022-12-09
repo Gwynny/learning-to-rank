@@ -1,11 +1,9 @@
 import math
-
 import numpy as np
 import torch
 from catboost.datasets import msrank_10k
 from sklearn.preprocessing import StandardScaler
 from torch import nn
-
 from typing import List
 
 
@@ -28,8 +26,10 @@ class ListNet(torch.nn.Module):
 
 
 class Solution:
-    def __init__(self, n_epochs: int = 5, listnet_hidden_dim: int = 30,
-                 lr: float = 0.001, ndcg_top_k: int = 10):
+    def __init__(self, n_epochs: int = 5,
+                 listnet_hidden_dim: int = 30,
+                 lr: float = 0.001,
+                 ndcg_top_k: int = 10):
         self._prepare_data()
         self.num_input_features = self.X_train.shape[1]
         self.ndcg_top_k = ndcg_top_k
@@ -55,6 +55,11 @@ class Solution:
                 query_ids_test]
 
     def _prepare_data(self) -> None:
+        """
+        Do standart scaling of Train and Valid datasets for every query
+        and transform data from numpy arrays to Torch's tensors
+        :return:
+        """
         (X_train, y_train, self.query_ids_train,
          X_test, y_test, self.query_ids_test) = self._get_data()
         # my code below
@@ -73,6 +78,12 @@ class Solution:
     def _scale_features_in_query_groups(self, inp_feat_array: np.ndarray,
                                         inp_query_ids: np.ndarray) -> \
             np.ndarray:
+        """
+        Scale every query. Can be rewrotten with df.groupby.apply
+        :param inp_feat_array:
+        :param inp_query_ids:
+        :return:
+        """
         # my code below
         for query_id in np.unique(inp_query_ids):
             mask = inp_query_ids == query_id
@@ -101,12 +112,14 @@ class Solution:
 
     def _calc_loss(self, batch_ys: torch.FloatTensor,
                    batch_pred: torch.FloatTensor) -> torch.FloatTensor:
+        """used Kullback-Leibner loss for training. CE alternative"""
         # my code below
         P_y_i = torch.softmax(batch_ys, dim=0)
         P_z_i = torch.softmax(batch_pred, dim=0)
         return -torch.sum(P_y_i * torch.log(P_z_i/P_y_i))
 
     def _train_one_epoch(self) -> None:
+        """note that preds should be reshaped to output in proper way"""
         self.model.train()
         # my code below
         unique_queries = np.unique(self.query_ids_train)
@@ -123,6 +136,7 @@ class Solution:
             self.optimizer.step()
 
     def _eval_test_set(self) -> float:
+        """Calculate NDCG for every query and taking a mean of it"""
         with torch.no_grad():
             self.model.eval()
             unique_queries = np.unique(self.query_ids_test)
@@ -140,7 +154,8 @@ class Solution:
                 ndcgs.append(group_dcg)
             return np.mean(ndcgs)
 
-    def _dcg(self, ys_true: torch.Tensor, ys_pred: torch.Tensor,
+    def _dcg(self, ys_true: torch.Tensor,
+             ys_pred: torch.Tensor,
              k: int) -> float:
         ys_pred, indices = torch.sort(ys_pred, dim=0, descending=True)
         ys_true = ys_true[indices[:k]]
@@ -150,8 +165,10 @@ class Solution:
             sum_dcg += (2 ** y_true - 1) / math.log2(i + 1)
         return sum_dcg
 
-    def _ndcg_k(self, ys_true: torch.Tensor, ys_pred: torch.Tensor,
+    def _ndcg_k(self, ys_true: torch.Tensor,
+                ys_pred: torch.Tensor,
                 ndcg_top_k: int) -> float:
+        """NDCG@k variant"""
         # my code below
         ideal_dcg = self._dcg(ys_true, ys_true, ndcg_top_k)
         case_dcg = self._dcg(ys_true, ys_pred, ndcg_top_k)
