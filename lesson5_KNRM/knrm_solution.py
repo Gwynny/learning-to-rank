@@ -5,10 +5,8 @@ import string
 import torch
 import numpy as np
 import pandas as pd
-import torch.nn.functional as F
 from collections import Counter
 from typing import Dict, List, Tuple, Union, Callable
-
 nltk.download('punkt')
 
 # Замените пути до директорий и файлов! Можете использовать для локальной
@@ -57,7 +55,7 @@ class KNRM(torch.nn.Module):
     def _get_kernels_layers(self) -> torch.nn.ModuleList:
         kernels = torch.nn.ModuleList()
         # my code here
-        shrink_len = 1.0 / self.kernel_num
+        shrink_len = 1.0 / (self.kernel_num - 1)
         left, right = -1.0 + shrink_len, 1.0 - shrink_len
         mus = np.append(np.linspace(left, right, self.kernel_num - 1), 1.0)
         sigmas = np.array(
@@ -323,7 +321,7 @@ class Solution:
     def simple_preproc(self, inp_str: str) -> List[str]:
         # my code below
         no_punctuation_str = self.handle_punctuation(inp_str)
-        lowered_str = no_punctuation_str.lower()
+        lowered_str = no_punctuation_str.strip().lower()
         splitted_doc = nltk.word_tokenize(lowered_str)
         return splitted_doc
 
@@ -337,28 +335,23 @@ class Solution:
     def get_all_tokens(self, list_of_df: List[pd.DataFrame],
                        min_occurancies: int) -> List[str]:
         # my code below
-        preped_series = []
+        def flatten(t): return [item for sublist in t for item in sublist]
+        tokens = []
         for df in list_of_df:
-            preped_question1 = df['text_left'].apply(self.simple_preproc)
-            preped_question2 = df['text_right'].apply(self.simple_preproc)
-            preped_series.append(preped_question1)
-            preped_series.append(preped_question2)
-
-        concat_series = pd.concat(preped_series)
-        one_list_of_tokens = list(
-            itertools.chain.from_iterable(concat_series.to_list())
-        )
-        vocab = dict(Counter(one_list_of_tokens))
-        vocab = self._filter_rare_words(vocab, min_occurancies)
-        tokens = [key for key in vocab.keys()]
-        return tokens
+            unique_texts = set(
+                df[['text_left', 'text_right']].values.reshape(-1))
+            df_tokens = flatten(map(self.simple_preproc, unique_texts))
+            tokens.extend(list(df_tokens))
+        count_filtered = self._filter_rare_words(
+            Counter(tokens), min_occurancies)
+        return list(count_filtered.keys())
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
         # my code below
         with open(file_path, encoding='utf-8') as file:
             glove_dict = {}
             for line in file:
-                splitted_line = line.split()
+                splitted_line = line.rstrip().split()
                 word, embedding = splitted_line[0], splitted_line[1:]
                 glove_dict[word] = embedding
         return glove_dict
@@ -440,7 +433,7 @@ class Solution:
             np.random.shuffle(right_ids)
             candidates = list(itertools.combinations(right_ids, 2))
             candidates_inds = np.random.choice(list(range(len(candidates))),
-                                               size=4, replace=False)
+                                               size=3, replace=False)
 
             for ind in candidates_inds:
                 candidate_left, candidate_right = candidates[ind][0], \
