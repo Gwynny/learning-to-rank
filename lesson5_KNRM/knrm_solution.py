@@ -102,7 +102,8 @@ class KNRM(torch.nn.Module):
         doc_norm = doc_m.norm(dim=2)[:, :, None]
         query_normalised = query_m / torch.clamp(query_norm, min=eps)
         doc_normalised = doc_m / torch.clamp(doc_norm, min=eps)
-        similarity_m = torch.bmm(query_normalised, doc_normalised.transpose(1, 2))
+        similarity_m = torch.bmm(query_normalised,
+                                 doc_normalised.transpose(1, 2))
         return similarity_m
 
     def _apply_kernels(self,
@@ -154,15 +155,12 @@ class RankingDataset(torch.utils.data.Dataset):
             token_idxs.append(self.vocab.get(token, self.oov_val))
         return token_idxs
 
-    def _convert_text_idx_to_token_idxs(self, idx: int) -> List[int]:
+    def _convert_text_idx_to_token_idxs(self, idx: str) -> List[int]:
         # my code here
         text = self.idx_to_text_mapping[idx]
         tokenized_text = self.preproc_func(text)
         token_idxs = self._tokenized_text_to_index(tokenized_text)
         return token_idxs
-
-    def __getitem__(self, idx: int):
-        pass
 
     def __getitem__(self, idx: int):
         pass
@@ -173,8 +171,10 @@ class TrainTripletsDataset(RankingDataset):
         # my code here
         triplets = self.index_pairs_or_triplets[idx]
         query_tokens = self._convert_text_idx_to_token_idxs(str(triplets[0]))
-        left_doc_tokens = self._convert_text_idx_to_token_idxs(str(triplets[1]))
-        right_doc_tokens = self._convert_text_idx_to_token_idxs(str(triplets[2]))
+        left_doc_tokens = self._convert_text_idx_to_token_idxs(
+            str(triplets[1]))
+        right_doc_tokens = self._convert_text_idx_to_token_idxs(
+            str(triplets[2]))
         label = triplets[3]
 
         left_query_doc = {'query': query_tokens, 'document': left_doc_tokens}
@@ -189,7 +189,6 @@ class ValPairsDataset(RankingDataset):
         query_tokens = self._convert_text_idx_to_token_idxs(str(pairs[0]))
         doc_tokens = self._convert_text_idx_to_token_idxs(str(pairs[1]))
         label = pairs[2]
-
         query_doc = {'query': query_tokens, 'document': doc_tokens}
         return query_doc, label
 
@@ -302,9 +301,8 @@ class Solution:
 
     def get_glue_df(self, partition_type: str) -> pd.DataFrame:
         assert partition_type in ['dev', 'train']
-        glue_df = pd.read_csv(
-            self.glue_qqp_dir + f'/{partition_type}.tsv', sep='\t',
-            error_bad_lines=False, dtype=object)
+        glue_df = pd.read_csv(self.glue_qqp_dir + f'/{partition_type}.tsv',
+                              sep='\t', dtype=object)
         glue_df = glue_df.dropna(axis=0, how='any').reset_index(drop=True)
         glue_df_fin = pd.DataFrame({
             'id_left': glue_df['qid1'],
@@ -418,10 +416,11 @@ class Solution:
                     kernel_num=self.knrm_kernel_num)
         return knrm, vocab, unk_words
 
-    def sample_data_for_train_iter(inp_df: pd.DataFrame, seed: int
+    def sample_data_for_train_iter(self, inp_df: pd.DataFrame,
+                                   seed: int
                                    ) -> List[List[Union[str, float]]]:
         # допишите ваш код здесь
-        inp_df_select = train_df[['id_left', 'id_right', 'label']]
+        inp_df_select = inp_df[['id_left', 'id_right', 'label']]
         inf_df_group_sizes = inp_df_select.groupby('id_left').size()
         glue_dev_leftids_to_use = list(
             inf_df_group_sizes[inf_df_group_sizes >= 3].index)
@@ -430,7 +429,7 @@ class Solution:
         groups = inp_df_select[inp_df_select.id_left.isin(
             glue_dev_leftids_to_use)].groupby('id_left')
 
-        all_ids = set(train_df['id_left']).union(set(train_df['id_right']))
+        all_ids = set(inp_df['id_left']).union(set(inp_df['id_right']))
 
         out_triplets = []
 
@@ -439,10 +438,9 @@ class Solution:
         for id_left, group in groups:
             right_ids = np.array(group['id_right'].to_list())
             np.random.shuffle(right_ids)
-            all_groups_ids = set([id_left]).union(set(right_ids))
-            candidates = list(combinations(right_ids, 2))
+            candidates = list(itertools.combinations(right_ids, 2))
             candidates_inds = np.random.choice(list(range(len(candidates))),
-                                               size=3, replace=False)
+                                               size=4, replace=False)
 
             for ind in candidates_inds:
                 candidate_left, candidate_right = candidates[ind][0], \
@@ -513,14 +511,14 @@ class Solution:
             inp_df[
                 ['id_left', 'text_left']
             ].drop_duplicates()
-                .set_index('id_left')
+             .set_index('id_left')
             ['text_left'].to_dict()
         )
         right_dict = (
             inp_df[
                 ['id_right', 'text_right']
             ].drop_duplicates()
-                .set_index('id_right')
+             .set_index('id_right')
             ['text_right'].to_dict()
         )
         left_dict.update(right_dict)
@@ -572,15 +570,15 @@ class Solution:
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
         # допишите ваш код здесь
-        triplets = sample_data_for_train_iter(self.glue_train_df, 0)
+        triplets = self.sample_data_for_train_iter(self.glue_train_df, 0)
         train_dataset = TrainTripletsDataset(triplets,
                                              self.idx_to_text_mapping_train,
                                              vocab=self.vocab,
                                              oov_val=self.vocab['OOV'],
                                              preproc_func=self.simple_preproc)
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=self.dataloader_bs, num_workers=0,
-            collate_fn=collate_fn, shuffle=True)
+            train_dataset, batch_size=self.dataloader_bs,
+            num_workers=0, collate_fn=collate_fn, shuffle=True)
 
         for i in range(n_epochs):
             self.model.train(True)
@@ -590,6 +588,7 @@ class Solution:
                 opt.zero_grad()
                 outputs = self.model(query_left_docs, query_right_docs)
                 loss = criterion(outputs, labels)
+                # print(loss.item())
                 loss.backward()
                 opt.step()
 
