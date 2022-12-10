@@ -60,9 +60,11 @@ class KNRM(torch.nn.Module):
         shrink_len = 1.0 / self.kernel_num
         left, right = -1.0 + shrink_len, 1.0 - shrink_len
         mus = np.append(np.linspace(left, right, self.kernel_num - 1), 1.0)
+        sigmas = np.array(
+            (self.kernel_num - 1) * [self.sigma] + [self.exact_sigma])
 
-        for mu in mus:
-            kernels.append(GaussianKernel(mu=mu, sigma=self.sigma))
+        for mu, sigma in zip(mus, sigmas):
+            kernels.append(GaussianKernel(mu=mu, sigma=sigma))
         return kernels
 
     def _get_mlp(self) -> torch.nn.Sequential:
@@ -95,11 +97,13 @@ class KNRM(torch.nn.Module):
         # how-to-compute-the-cosine-similarity-in-pytorch-for-all-rows-in-a
         # -matrix-with-re
         eps = 1e-8
-        q_n, d_n = query.norm(dim=2)[:, :, None], doc.norm(dim=2)[:, :, None]
-        query_norm = query / torch.clamp(q_n, min=eps)
-        doc_norm = doc / torch.clamp(d_n, min=eps)
-        sim_mt = torch.bmm(query_norm, doc_norm.transpose(1, 2))
-        return sim_mt
+        query_m, doc_m = self.embeddings(query), self.embeddings(doc)
+        query_norm = query_m.norm(dim=2)[:, :, None]
+        doc_norm = doc_m.norm(dim=2)[:, :, None]
+        query_normalised = query_m / torch.clamp(query_norm, min=eps)
+        doc_normalised = doc_m / torch.clamp(doc_norm, min=eps)
+        similarity_m = torch.bmm(query_normalised, doc_normalised.transpose(1, 2))
+        return similarity_m
 
     def _apply_kernels(self,
                        matching_matrix: torch.FloatTensor) -> \
