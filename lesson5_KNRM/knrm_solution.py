@@ -133,7 +133,8 @@ class KNRM(torch.nn.Module):
 
 class RankingDataset(torch.utils.data.Dataset):
     def __init__(self, index_pairs_or_triplets: List[List[Union[str, float]]],
-                 idx_to_text_mapping: Dict[str, str], vocab: Dict[str, int],
+                 idx_to_text_mapping: Dict[str, str],
+                 vocab: Dict[str, int],
                  oov_val: int,
                  preproc_func: Callable, max_len: int = 30):
         self.index_pairs_or_triplets = index_pairs_or_triplets
@@ -237,7 +238,7 @@ def collate_fn(
         if is_triplets:
             q2s.append(right_elem['query'] + [0] * pad_len3)
             d2s.append(right_elem['document'] + [0] * pad_len4)
-        labels.append([label])
+        labels.append([float(label)])
     q1s = torch.LongTensor(q1s)
     d1s = torch.LongTensor(d1s)
     if is_triplets:
@@ -336,17 +337,22 @@ class Solution:
 
     def get_all_tokens(self, list_of_df: List[pd.DataFrame],
                        min_occurancies: int) -> List[str]:
-        # my code below
-        def flatten(t): return [item for sublist in t for item in sublist]
+        preped_series = []
+        # def flatten(t): return [item for sublist in t for item in sublist]
         tokens = []
         for df in list_of_df:
-            unique_texts = set(
-                df[['text_left', 'text_right']].values.reshape(-1))
-            df_tokens = flatten(map(self.simple_preproc, unique_texts))
-            tokens.extend(list(df_tokens))
-        count_filtered = self._filter_rare_words(
-            Counter(tokens), min_occurancies)
-        return list(count_filtered.keys())
+            preped_question1 = df['text_left'].apply(self.simple_preproc)
+            preped_question2 = df['text_right'].apply(self.simple_preproc)
+            preped_series.append(preped_question1)
+            preped_series.append(preped_question2)
+
+        concat_series = pd.concat(preped_series)
+        one_list_of_tokens = set(list(
+            itertools.chain.from_iterable(concat_series.to_list())))
+        vocab = dict(Counter(one_list_of_tokens))
+        vocab = self._filter_rare_words(vocab, min_occurancies)
+        tokens = [key for key in vocab.keys()]
+        return tokens
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
         # my code below
@@ -371,7 +377,7 @@ class Solution:
         emb_dim = len(glove_dict['the'])
 
         emb_matrix = []
-        pad_vec = np.zeros((emb_dim, ))
+        pad_vec = np.zeros((emb_dim,))
         oov_vec = np.random.uniform(low=-rand_uni_bound,
                                     high=rand_uni_bound,
                                     size=emb_dim)
@@ -408,56 +414,37 @@ class Solution:
                     kernel_num=self.knrm_kernel_num)
         return knrm, vocab, unk_words
 
-    def sample_data_for_train_iter(self, inp_df: pd.DataFrame,
-                                   seed: int
+    def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int
                                    ) -> List[List[Union[str, float]]]:
-        # допишите ваш код здесь
-        inp_df_select = inp_df[['id_left', 'id_right', 'label']]
-        inf_df_group_sizes = inp_df_select.groupby('id_left').size()
-        glue_dev_leftids_to_use = list(
-            inf_df_group_sizes[inf_df_group_sizes >= 3].index)
-        glue_dev_leftids_to_use = np.random.choice(
-            list(glue_dev_leftids_to_use), size=3000, replace=False)
-        groups = inp_df_select[inp_df_select.id_left.isin(
-            glue_dev_leftids_to_use)].groupby('id_left')
-
-        all_ids = set(inp_df['id_left']).union(set(inp_df['id_right']))
-
-        out_triplets = []
-
+        groups = inp_df[['id_left', 'id_right', 'label']].groupby('id_left')
+        pairs_w_labels = []
         np.random.seed(seed)
-        negative_example = np.random.choice(list(all_ids), size=1).item()
+        all_right_ids = inp_df.id_right.values
         for id_left, group in groups:
-            right_ids = np.array(group['id_right'].to_list())
-            np.random.shuffle(right_ids)
-            candidates = list(itertools.combinations(right_ids, 2))
-            candidates_inds = np.random.choice(list(range(len(candidates))),
-                                               size=3, replace=False)
-
-            for ind in candidates_inds:
-                candidate_left, candidate_right = candidates[ind][0], \
-                                                  candidates[ind][1]
-                left_label = group[group['id_right'] == candidate_left][
-                    'label'].item()
-                right_label = group[group['id_right'] == candidate_right][
-                    'label'].item()
-                label_diff = left_label - right_label
-                if label_diff > 0:
-                    out_triplets.append(
-                        [id_left, candidate_left, candidate_right, 1])
-                else:
-                    out_triplets.append(
-                        [id_left, candidate_left, candidate_right, 0])
-
-            # negative_example = np.random.choice(list(all_ids), size=1).item()
-            out_triplets.append(
-                [id_left, candidate_right, negative_example, 0])
-            negative_example = id_left
-
-        out_triplets = np.array(out_triplets)
-        train_inds = np.random.choice(list(range(len(out_triplets))),
-                                      size=10000, replace=False)
-        return out_triplets[train_inds]
+            labels = group.label.unique()
+            if len(labels) > 1:
+                for label in labels:
+                    same_label_samples = group[group.label ==
+                                               label].id_right.values
+                    if label == 0 and len(same_label_samples) > 1:
+                        sample = np.random.choice(
+                            same_label_samples, 2, replace=False)
+                        pairs_w_labels.append(
+                            [id_left, sample[0], sample[1], 0.5])
+                    elif label == 1:
+                        less_label_samples = group[group.label <
+                                                   label].id_right.values
+                        pos_sample = np.random.choice(
+                            same_label_samples, 1, replace=False)
+                        if len(less_label_samples) > 0:
+                            neg_sample = np.random.choice(
+                                less_label_samples, 1, replace=False)
+                        else:
+                            neg_sample = np.random.choice(
+                                all_right_ids, 1, replace=False)
+                        pairs_w_labels.append(
+                            [id_left, pos_sample[0], neg_sample[0], 1])
+        return pairs_w_labels
 
     def create_val_pairs(self,
                          inp_df: pd.DataFrame,
@@ -503,14 +490,14 @@ class Solution:
             inp_df[
                 ['id_left', 'text_left']
             ].drop_duplicates()
-             .set_index('id_left')
+            .set_index('id_left')
             ['text_left'].to_dict()
         )
         right_dict = (
             inp_df[
                 ['id_right', 'text_right']
             ].drop_duplicates()
-             .set_index('id_right')
+            .set_index('id_right')
             ['text_right'].to_dict()
         )
         left_dict.update(right_dict)
@@ -556,34 +543,35 @@ class Solution:
                 ndcgs.append(0)
             else:
                 ndcgs.append(ndcg)
-        return np.mean(ndcgs)
+        return float(np.mean(ndcgs))
 
     def train(self, n_epochs: int):
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
         # допишите ваш код здесь
-        triplets = self.sample_data_for_train_iter(self.glue_train_df, 0)
-        train_dataset = TrainTripletsDataset(triplets,
-                                             self.idx_to_text_mapping_train,
-                                             vocab=self.vocab,
-                                             oov_val=self.vocab['OOV'],
-                                             preproc_func=self.simple_preproc)
-        train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=self.dataloader_bs,
-            num_workers=0, collate_fn=collate_fn, shuffle=True)
-
-        for i in range(n_epochs):
-            self.model.train(True)
+        for ep in range(n_epochs):
+            if ep % self.change_train_loader_ep == 0:
+                sampled_train_triplets = self.sample_data_for_train_iter(
+                    self.glue_train_df, seed=ep)
+                train_dataset = TrainTripletsDataset(
+                    sampled_train_triplets,
+                    self.idx_to_text_mapping_train,
+                    vocab=self.vocab,
+                    oov_val=self.vocab['OOV'],
+                    preproc_func=self.simple_preproc)
+                train_dataloader = torch.utils.data.DataLoader(
+                    train_dataset, batch_size=self.dataloader_bs,
+                    num_workers=0,
+                    collate_fn=collate_fn, shuffle=True, )
             for j, data in enumerate(train_dataloader):
-                # Every data instance is an input + label pair
                 query_left_docs, query_right_docs, labels = data
-                opt.zero_grad()
                 outputs = self.model(query_left_docs, query_right_docs)
                 loss = criterion(outputs, labels)
-                # print(loss.item())
                 loss.backward()
                 opt.step()
 
-            self.model.train(False)
             val_ndcg = self.valid(self.model, self.val_dataloader)
-            print(f'Epoch: {i}, validation ndcg {val_ndcg}')
+            print(f'Epoch: {ep}, validation ndcg {val_ndcg}')
+            if val_ndcg > 0.925:
+                break
+
