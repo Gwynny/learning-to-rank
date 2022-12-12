@@ -69,6 +69,7 @@ class KNRM(torch.nn.Module):
         # my code here
         if len(self.out_layers) == 0:
             return torch.nn.Sequential(torch.nn.Linear(self.kernel_num, 1))
+
         layers = [torch.nn.Linear(self.kernel_num, self.out_layers[0]),
                   torch.nn.ReLU()]
         for i in range(1, len(self.out_layers)):
@@ -187,6 +188,7 @@ class ValPairsDataset(RankingDataset):
         query_tokens = self._convert_text_idx_to_token_idxs(str(pairs[0]))
         doc_tokens = self._convert_text_idx_to_token_idxs(str(pairs[1]))
         label = pairs[2]
+
         query_doc = {'query': query_tokens, 'document': doc_tokens}
         return query_doc, label
 
@@ -369,9 +371,7 @@ class Solution:
         emb_dim = len(glove_dict['the'])
 
         emb_matrix = []
-        pad_vec = np.random.uniform(low=-rand_uni_bound,
-                                    high=rand_uni_bound,
-                                    size=emb_dim)
+        pad_vec = np.zeros((emb_dim, ))
         oov_vec = np.random.uniform(low=-rand_uni_bound,
                                     high=rand_uni_bound,
                                     size=emb_dim)
@@ -382,16 +382,15 @@ class Solution:
         unk_words = []
         vocab['PAD'], vocab['OOV'] = 0, 1
         for ind, token in enumerate(inner_keys, 2):
+            vocab[token] = ind
             if token in glove_dict.keys():
                 emb_matrix.append(glove_dict[token])
-                vocab[token] = ind
             else:
                 random_emb = np.random.uniform(low=-rand_uni_bound,
                                                high=rand_uni_bound,
                                                size=emb_dim)
                 emb_matrix.append(random_emb)
                 unk_words.append(token)
-                vocab[token] = ind
         emb_matrix = np.array(emb_matrix).astype(float)
         return emb_matrix, vocab, unk_words
 
