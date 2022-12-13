@@ -152,7 +152,7 @@ class Solution:
                     ndcgs.append(0)
                     continue
                 ndcgs.append(group_dcg)
-            return np.mean(ndcgs)
+            return np.mean(ndcgs).item()
 
     def _dcg(self, ys_true: torch.Tensor,
              ys_pred: torch.Tensor,

@@ -338,8 +338,6 @@ class Solution:
     def get_all_tokens(self, list_of_df: List[pd.DataFrame],
                        min_occurancies: int) -> List[str]:
         preped_series = []
-        # def flatten(t): return [item for sublist in t for item in sublist]
-        tokens = []
         for df in list_of_df:
             preped_question1 = df['text_left'].apply(self.simple_preproc)
             preped_question2 = df['text_right'].apply(self.simple_preproc)
@@ -351,8 +349,7 @@ class Solution:
             itertools.chain.from_iterable(concat_series.to_list())))
         vocab = dict(Counter(one_list_of_tokens))
         vocab = self._filter_rare_words(vocab, min_occurancies)
-        tokens = [key for key in vocab.keys()]
-        return tokens
+        return list(vocab.keys())
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
         # my code below
