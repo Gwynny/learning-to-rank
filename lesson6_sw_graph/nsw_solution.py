@@ -1,7 +1,6 @@
+import numpy as np
 from collections import OrderedDict, defaultdict
 from typing import Callable, Tuple, Dict, List
-
-import numpy as np
 
 
 def distance(pointA: np.ndarray, documents: np.ndarray) -> np.ndarray:
@@ -17,7 +16,7 @@ def create_sw_graph(
         use_sampling: bool = False,
         sampling_share: float = 0.05,
         dist_f: Callable = distance
-) -> Dict[int, List[int]]:
+        ) -> Dict[int, List[int]]:
     """
     creates small world graph with closest and furthest points
     :param data:
@@ -32,18 +31,25 @@ def create_sw_graph(
     """
     # my code here
     graph = {}
+    num_points = data.shape[0]
     for i, point in enumerate(data):
+        if not use_sampling:
+            all_dists = dist_f(point, data)
+            argsorted = np.argsort(all_dists.reshape(1, -1))[0][1:]
+        else:
+            sample_size = int(num_points * sampling_share)
+            choiced = np.random.choice(
+                list(range(num_points)), size=sample_size, replace=False)
+            part_dists = dist_f(point, data[choiced, :])
+            argsorted = choiced[np.argsort(part_dists.reshape(1, -1))[0][1:]]
         candidates_for_point = []
 
-        distances = dist_f(point, data)
-        sorted_distances = np.argsort(distances, axis=0).reshape(-1, )
-
-        further_points = sorted_distances[-num_candidates_for_choice_long:]
+        further_points = argsorted[-num_candidates_for_choice_long:]
         further_points = np.random.choice(further_points, size=num_edges_long,
                                           replace=False)
         candidates_for_point.extend(list(further_points))
 
-        closer_points = sorted_distances[1:num_candidates_for_choice_short + 1]
+        closer_points = argsorted[:num_candidates_for_choice_short]
         closer_points = np.random.choice(closer_points, size=num_edges_short,
                                          replace=False)
         candidates_for_point.extend(list(closer_points))
