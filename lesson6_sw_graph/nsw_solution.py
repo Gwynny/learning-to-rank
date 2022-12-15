@@ -1,10 +1,9 @@
 import numpy as np
-from collections import OrderedDict, defaultdict
 from typing import Callable, Tuple, Dict, List
 
 
-def distance(pointA: np.ndarray, documents: np.ndarray) -> np.ndarray:
-    return np.linalg.norm(pointA - documents, axis=1).reshape(-1, 1)
+def distance(query: np.ndarray, documents: np.ndarray) -> np.ndarray:
+    return np.linalg.norm(query - documents, axis=1).reshape(-1, 1)
 
 
 def create_sw_graph(
@@ -16,7 +15,7 @@ def create_sw_graph(
         use_sampling: bool = False,
         sampling_share: float = 0.05,
         dist_f: Callable = distance
-        ) -> Dict[int, List[int]]:
+) -> Dict[int, List[int]]:
     """
     creates small world graph with closest and furthest points
     :param data:
@@ -57,11 +56,24 @@ def create_sw_graph(
     return graph
 
 
+def calc_dist_and_upd(all_visited_points: dict,
+                      query_point: np.ndarray,
+                      all_documents: np.ndarray,
+                      point_idx: int,
+                      dist_f: Callable
+                      ) -> Tuple[float, bool]:
+    if point_idx in all_visited_points:
+        return all_visited_points[point_idx], True
+    cur_dist = \
+        dist_f(query_point, all_documents[point_idx, :].reshape(1, -1))[0][0]
+    all_visited_points[point_idx] = cur_dist
+    return cur_dist, False
+
+
 def nsw(query_point: np.ndarray,
         all_documents: np.ndarray,
-        graph_edges: Dict[int, List[int]],
-        search_k: int = 10,
-        num_start_points: int = 5,
+        graph_edges: Dict,
+        search_k: int = 10, num_start_points: int = 5,
         dist_f: Callable = distance) -> np.ndarray:
     """
     do navigable search with help of small world graph
@@ -69,64 +81,44 @@ def nsw(query_point: np.ndarray,
     :param all_documents: all available data
     :param graph_edges: small world graph
     :param search_k: num of output documents
-    :param num_start_points: 5 init point to start a search thru graph
+    :param num_start_points: 5 init point to start a search through graph
     :param dist_f: eucledian distance
-    :return: top k closest docs
+    :return: approximate top k closest docs
     """
-    # my code below
-    start_points = np.random.choice(all_documents.shape[0],
-                                    size=num_start_points,
-                                    replace=False)
+    all_visited_points = {}
+    num_started_points = 0
+    while (num_started_points < num_start_points) or \
+            (len(all_visited_points) < search_k):
+        cur_point_idx = np.random.randint(0, all_documents.shape[0] - 1)
+        cur_dist, is_visited = calc_dist_and_upd(
+            all_visited_points, query_point, all_documents,
+            cur_point_idx, dist_f)
+        if is_visited:
+            continue
 
-    def search_candidates(query, graph, next_elem, visited, first_min_elem,
-                          second_min_elem):
-        visited.append(next_elem)
-        documents = all_documents[graph[start_point]]
-        distances = dist_f(query, documents)
-        sorted_distances = np.argsort(distances, axis=0).reshape(-1, )
-        first_closest_candidate_ind = sorted_distances[0]
-        second_closest_candidate_ind = sorted_distances[1]
-        first_closest_candidate_dist = distances[first_closest_candidate_ind]
-        second_closest_candidate_dist = distances[second_closest_candidate_ind]
+        while True:
+            min_dist = cur_dist
+            choiced_cand = cur_point_idx
 
-        if first_min_elem['dist'] > first_closest_candidate_dist:
-            first_min_elem['ind'] = first_closest_candidate_ind
-            first_min_elem['dist'] = first_closest_candidate_dist
-            next_elem = first_closest_candidate_ind
-        elif second_min_elem['dist'] > second_closest_candidate_dist:
-            second_min_elem['ind'] = second_closest_candidate_ind
-            second_min_elem['dist'] = second_closest_candidate_dist
-            next_elem = second_closest_candidate_ind
-        elif second_min_elem['dist'] > first_closest_candidate_dist:
-            second_min_elem['ind'] = first_closest_candidate_ind
-            second_min_elem['dist'] = first_closest_candidate_dist
-            next_elem = first_closest_candidate_ind
+            cands_idxs = graph_edges[cur_point_idx]
+            visited_before_cands = {cur_point_idx}
+            for cand_idx in cands_idxs:
+                tmp_d, verdict = calc_dist_and_upd(
+                    all_visited_points, query_point, all_documents,
+                    cand_idx, dist_f)
+                if tmp_d < min_dist:
+                    min_dist = tmp_d
+                    choiced_cand = cand_idx
+                if is_visited:
+                    visited_before_cands.add(cand_idx)
 
-        if next_elem in visited:
-            print(first_min_elem)
-            print(second_min_elem)
-            return first_min_elem, second_min_elem
-        search_candidates(query, graph, next_elem, visited, first_min_elem,
-                          second_min_elem)
-        # return first_min_elem, second_min_elem
+            if choiced_cand in visited_before_cands:
+                break
+            cur_dist = min_dist
+            cur_point_idx = choiced_cand
 
-    closest_candidates = []
-    distances = []
-    for start_point in start_points:
-        first_elem = {'ind': -1, 'dist': float('inf')}
-        second_elem = {'ind': -1, 'dist': float('inf')}
-        visited = []
-        first_min_elem, second_min_elem = search_candidates(query_point,
-                                                            graph_edges,
-                                                            start_point,
-                                                            visited,
-                                                            first_elem,
-                                                            second_elem)
-        closest_candidates.extend[
-            [first_min_elem['ind'], second_min_elem['ind']]]
-        distances.extend[[first_min_elem['dist'], second_min_elem['dist']]]
+        num_started_points += 1
 
-    top_closest_points = np.argsort(np.array(distances), axis=0)[:search_k]
-    closest_candidates = np.array(closest_candidates)[top_closest_points]
-    return all_documents[closest_candidates]
-
+    best_idxs = np.argsort(list(all_visited_points.values()))[:search_k]
+    final_idx = np.array(list(all_visited_points.keys()))[best_idxs]
+    return final_idx
