@@ -62,6 +62,15 @@ def calc_dist_and_upd(all_visited_points: dict,
                       point_idx: int,
                       dist_f: Callable
                       ) -> Tuple[float, bool]:
+    """
+    calculate distance between query point and specific point from all docs
+    :param all_visited_points: if spec point in visited we will not calculate
+    :param query_point:
+    :param all_documents:
+    :param point_idx:
+    :param dist_f:
+    :return: distance and is_visited flag
+    """
     if point_idx in all_visited_points:
         return all_visited_points[point_idx], True
     cur_dist = \
