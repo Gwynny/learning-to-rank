@@ -103,7 +103,7 @@ def nsw(query_point: np.ndarray,
             cands_idxs = graph_edges[cur_point_idx]
             visited_before_cands = {cur_point_idx}
             for cand_idx in cands_idxs:
-                tmp_d, verdict = calc_dist_and_upd(
+                tmp_d, is_visited = calc_dist_and_upd(
                     all_visited_points, query_point, all_documents,
                     cand_idx, dist_f)
                 if tmp_d < min_dist:
