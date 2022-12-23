@@ -264,7 +264,7 @@ class Solution:
                  knrm_kernel_num: int = 21,
                  knrm_out_mlp: List[int] = [],
                  dataloader_bs: int = 1024,
-                 train_lr: float = 0.001,
+                 train_lr: float = 0.1,
                  change_train_loader_ep: int = 10
                  ):
         self.glue_qqp_dir = glue_qqp_dir
@@ -561,6 +561,7 @@ class Solution:
                     num_workers=0,
                     collate_fn=collate_fn, shuffle=True, )
             for j, data in enumerate(train_dataloader):
+                opt.zero_grad()
                 query_left_docs, query_right_docs, labels = data
                 outputs = self.model(query_left_docs, query_right_docs)
                 loss = criterion(outputs, labels)
