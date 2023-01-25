@@ -411,37 +411,40 @@ class Solution:
                     kernel_num=self.knrm_kernel_num)
         return knrm, vocab, unk_words
 
-    def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int
-                                   ) -> List[List[Union[str, float]]]:
-        groups = inp_df[['id_left', 'id_right', 'label']].groupby('id_left')
-        pairs_w_labels = []
+    def sample_data_for_train_iter(self,
+                                   inp_df: pd.DataFrame,
+                                   seed: int) -> List[List[Union[str, float]]]:
         np.random.seed(seed)
-        all_right_ids = inp_df.id_right.values
+        inp_df_select = inp_df[['id_left', 'id_right', 'label']]
+        inf_df_group_sizes = inp_df_select.groupby('id_left').size()
+        train_leftids_to_use = list(inf_df_group_sizes[inf_df_group_sizes >= 3].index)
+        groups = inp_df_select[inp_df_select.id_left.isin(train_leftids_to_use)].groupby('id_left')
+
+        out_triplets = []
         for id_left, group in groups:
-            labels = group.label.unique()
-            if len(labels) > 1:
-                for label in labels:
-                    same_label_samples = group[group.label ==
-                                               label].id_right.values
-                    if label == 0 and len(same_label_samples) > 1:
-                        sample = np.random.choice(
-                            same_label_samples, 2, replace=False)
-                        pairs_w_labels.append(
-                            [id_left, sample[0], sample[1], 0.5])
-                    elif label == 1:
-                        less_label_samples = group[group.label <
-                                                   label].id_right.values
-                        pos_sample = np.random.choice(
-                            same_label_samples, 1, replace=False)
-                        if len(less_label_samples) > 0:
-                            neg_sample = np.random.choice(
-                                less_label_samples, 1, replace=False)
-                        else:
-                            neg_sample = np.random.choice(
-                                all_right_ids, 1, replace=False)
-                        pairs_w_labels.append(
-                            [id_left, pos_sample[0], neg_sample[0], 1])
-        return pairs_w_labels
+            if group['label'].sum() == 0:
+                continue
+            ones_df = group[group['label'] == 1]
+            zeros_df = group[group['label'] == 0]
+
+            if len(zeros_df) > 1:
+                ones_ids = ones_df['id_right'].to_list()
+                np.random.shuffle(ones_ids)
+                zeros_ids = zeros_df['id_right'].to_list()
+                zero_one_permutations = [
+                    (one_id, zero_id) for one_id in ones_ids
+                    for zero_id in zeros_ids
+                ]
+                np.random.shuffle(zero_one_permutations)
+                for ids in zero_one_permutations[:4]:
+                    out_triplets.append([id_left, ids[0], ids[1], 1.0])
+
+                zeros_ids_permutations = list(
+                    itertools.combinations(zeros_ids, 2))
+                np.random.shuffle(zeros_ids_permutations)
+                for ids in zeros_ids_permutations[:2]:
+                    out_triplets.append([id_left, ids[0], ids[1], 0.5])
+        return out_triplets
 
     def create_val_pairs(self,
                          inp_df: pd.DataFrame,
